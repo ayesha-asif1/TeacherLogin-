@@ -1,0 +1,116 @@
+{% extends "layout.html" %}
+
+{% block head %}
+
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<!-- Css File Link -->
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<!-- Javascript File Link -->
+<script src="{{ url_for('static', filename='main.js') }}" defer></script>
+
+{% endblock %}
+
+{% block body %}
+<!-- Splash Screen -->
+<div id="splash-screen">
+    <div class="red-shade"></div>
+
+    <div class="logo-container">
+        <div class="university-name">
+            UNIVERSITY OF VETERINARY AND<br>
+            ANIMAL SCIENCES LAHORE
+        </div>
+
+        <div class="logo-letters">
+            <div class="letter" id="letter-u">U</div>
+            <div class="letter" id="letter-v">V</div>
+            <div class="letter" id="letter-a">A</div>
+            <div class="letter" id="letter-s">S</div>
+        </div>
+
+        <div class="caduceus">
+            <div class="staff"></div>
+            <div class="snake"></div>
+        </div>
+    </div>
+
+    <div class="loading-container">
+        <div class="loading-circle"></div>
+        <div class="loading-text">Loading Timetable System</div>
+    </div>
+</div>
+
+<!-- Login Page -->
+<div id="login-page">
+    <div class="login-container">
+        <div class="login-header">
+            <div class="login-logo">UVAS</div>
+            <h1 class="login-title">Timetable Management System</h1>
+            <p class="login-subtitle">University of Veterinary and Animal Sciences, Lahore</p>
+        </div>
+
+        <div class="login-options" id="login-options">
+            <div class="login-option" id="student-login">
+                <div class="option-icon">
+                    <i class="fas fa-user-graduate"></i>
+                </div>
+                <div class="option-text">
+                    <h3>Student Login</h3>
+                    <p>Access your timetable, courses, and academic information</p>
+                </div>
+            </div>
+
+            <div class="login-option" id="teacher-login">
+                <div class="option-icon">
+                    <i class="fas fa-chalkboard-teacher"></i>
+                </div>
+                <div class="option-text">
+                    <h3>Teacher Login</h3>
+                    <p>Manage your classes, schedules, and student records</p>
+                </div>
+            </div>
+
+            <div class="login-option" id="admin-login">
+                <div class="option-icon">
+                    <i class="fas fa-user-cog"></i>
+                </div>
+                <div class="option-text">
+                    <h3>Administrator Login</h3>
+                    <p>System administration and management</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teacher Login Form -->
+        <div id="teacher-login-form" style="display: none;" class="login-form-container">
+            <div class="back-button" id="back-to-options" style="margin-bottom: 20px; cursor: pointer; color: #8b0000;">
+                <i class="fas fa-arrow-left"></i> Back
+            </div>
+            <form action="/login" method="POST">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="email" style="display: block; margin-bottom: 5px; color: #333;">Email</label>
+                    <input type="email" id="email" name="email" required
+                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label for="password" style="display: block; margin-bottom: 5px; color: #333;">Password</label>
+                    <input type="password" id="password" name="password" required
+                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                </div>
+                <button type="submit"
+                    style="width: 100%; padding: 12px; background-color: #8b0000; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold;">Login</button>
+            </form>
+            {% if error %}
+            <p style="color: red; margin-top: 10px; text-align: center;">{{ error }}</p>
+            {% endif %}
+        </div>
+
+        <div class="copyright">
+            &copy; 2023 UVAS Timetable System. All rights reserved.
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -45,7 +45,7 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         # Add the second teacher
         cursor.execute("INSERT INTO users (email, full_name, password) VALUES (?, ?, ?)", 
-                       ('dr.ali@uvas.edu.pk', 'Dr. Ali', 'pass456'))
+                       ('dr.ali@uvas.edu.pk', 'Dr. Ali', 'drali'))
         print("Second teacher (Dr. Ali) added to database.")
     # ---------------------------
 

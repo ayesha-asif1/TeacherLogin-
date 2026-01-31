@@ -1,120 +1,135 @@
-from flask import Flask, render_template, redirect, request, session, url_for, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-import os
+import sqlite3
+from flask import Flask, render_template, redirect, request, session, jsonify, url_for
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///timetable.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.secret_key = 'uvas_secret_key'
 
-db = SQLAlchemy(app)
+# --- DATABASE INITIALIZATION ---
+def init_db():
+    conn = sqlite3.connect('timetable.db')
+    cursor = conn.cursor()
+    
+    # 1. Create the Users table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            email TEXT PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            password TEXT NOT NULL
+        )
+    ''')
+    
+    # 2. Create the Classes table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS classes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            teacher_email TEXT NOT NULL,
+            day TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            room TEXT NOT NULL
+        )
+    ''')
+    
+    cursor.execute("SELECT COUNT(*) FROM users")
+    count = cursor.fetchone()[0]
+    
+    if count == 0:
+        # Add the first teacher
+        cursor.execute("INSERT INTO users (email, full_name, password) VALUES (?, ?, ?)", 
+                       ('teacher@uvas.edu.pk', 'Dr. Ahmad', 'ahmad'))
+        print("Dr. Smith added.")
 
-# Models
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(100), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), nullable=False) # 'teacher', 'admin', 'student'
-    name = db.Column(db.String(100))
-    department = db.Column(db.String(50))
+    # Re-check count to add the second teacher if he doesn't exist yet
+    cursor.execute("SELECT COUNT(*) FROM users WHERE email = ?", ('dr.ali@uvas.edu.pk',))
+    if cursor.fetchone()[0] == 0:
+        # Add the second teacher
+        cursor.execute("INSERT INTO users (email, full_name, password) VALUES (?, ?, ?)", 
+                       ('dr.ali@uvas.edu.pk', 'Dr. Ali', 'pass456'))
+        print("Second teacher (Dr. Ali) added to database.")
+    # ---------------------------
 
-class Timetable(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    day = db.Column(db.String(20), nullable=False)
-    start_time = db.Column(db.String(20), nullable=False) # e.g., "09:00"
-    end_time = db.Column(db.String(20), nullable=False)   # e.g., "10:00"
-    subject = db.Column(db.String(100), nullable=False)
-    room = db.Column(db.String(50), nullable=False)
+    conn.commit()
+    conn.close()
 
-# Create tables and seed admin/teacher if not exists
-with app.app_context():
-    db.create_all()
-    # Seed a test teacher if not exists
-    if not User.query.filter_by(email='teacher@uvas.edu.pk').first():
-        hashed_pw = generate_password_hash('password123')
-        teacher = User(email='teacher@uvas.edu.pk', password=hashed_pw, role='teacher', name='Dr. Smith', department='CS')
-        db.session.add(teacher)
-        db.session.commit()
+# Make sure this is called so the changes happen!
+init_db()
+# Run the setup every time the app starts
+init_db()
+
+# --- ROUTES ---
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
-@app.route("/login", methods=["POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    email = request.form.get("email")
-    password = request.form.get("password")
+    if request.method == "POST":
+        email_input = request.form.get("username").strip().lower()
+        pass_input = request.form.get("password").strip()
+        
+        conn = sqlite3.connect('timetable.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # This will no longer crash because we just created the table!
+        cursor.execute("SELECT * FROM users WHERE email = ? AND password = ?", (email_input, pass_input))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            session["user_email"] = user["email"]
+            session["user_name"] = user["full_name"]
+            return redirect(url_for("dashboard"))
+        
+        return render_template("login.html", error="Invalid Email or Password")
+    return render_template("login.html")
+
+@app.route("/dashboard")
+def dashboard():
+    if "user_email" not in session:
+        return redirect(url_for("login"))
     
-    user = User.query.filter_by(email=email).first()
-    if user and check_password_hash(user.password, password):
-        session['user_id'] = user.id
-        session['role'] = user.role
-        session['name'] = user.name
-        if user.role == 'teacher':
-            return redirect(url_for('dashboard'))
-        else:
-            return "Role not supported yet", 403
-            
-    return render_template("index.html", error="Invalid credentials")
+    conn = sqlite3.connect('timetable.db')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM classes WHERE teacher_email = ?", (session["user_email"],))
+    
+    # Fix the 'Row is not JSON serializable' error from earlier
+    rows = cursor.fetchall()
+    timetable_list = [dict(row) for row in rows] 
+    conn.close()
+    
+    return render_template("dashboard.html", user_name=session["user_name"], timetable=timetable_list)
+
+@app.route("/api/timetable", methods=["POST"])
+def manage_timetable():
+    if "user_email" not in session:
+        return jsonify({"success": False}), 401
+
+    data = request.json
+    conn = sqlite3.connect('timetable.db')
+    cursor = conn.cursor()
+
+    if data.get("action") == "add":
+        cursor.execute('''
+            INSERT INTO classes (teacher_email, day, start_time, end_time, subject, room)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (session["user_email"], data["day"], data["start_time"], data["end_time"], data["subject"], data["room"]))
+    
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    return redirect(url_for("login"))
 
-@app.route("/dashboard")
-def dashboard():
-    if 'user_id' not in session or session.get('role') != 'teacher':
-        return redirect(url_for('index'))
-    
-    # Fetch timetable for this teacher
-    timetable_entries = Timetable.query.filter_by(teacher_id=session['user_id']).all()
-    return render_template("dashboard.html", user_name=session['name'], timetable=timetable_entries)
-
-@app.route("/api/timetable", methods=["POST"])
-def update_timetable():
-    if 'user_id' not in session or session.get('role') != 'teacher':
-        return jsonify({"error": "Unauthorized"}), 401
-        
-    data = request.json
-    action = data.get('action')
-    
-    if action == 'add':
-        new_entry = Timetable(
-            teacher_id=session['user_id'],
-            day=data.get('day'),
-            start_time=data.get('start_time'),
-            end_time=data.get('end_time'),
-            subject=data.get('subject'),
-            room=data.get('room')
-        )
-        db.session.add(new_entry)
-        db.session.commit()
-        return jsonify({"success": True, "id": new_entry.id})
-
-    elif action == 'update':
-        entry_id = data.get('id')
-        entry = Timetable.query.get(entry_id)
-        if entry and entry.teacher_id == session['user_id']:
-            entry.day = data.get('day')
-            entry.start_time = data.get('start_time')
-            entry.end_time = data.get('end_time')
-            entry.subject = data.get('subject')
-            entry.room = data.get('room')
-            db.session.commit()
-            return jsonify({"success": True})
-        
-    elif action == 'delete':
-        entry_id = data.get('id')
-        entry = Timetable.query.get(entry_id)
-        if entry and entry.teacher_id == session['user_id']:
-            db.session.delete(entry)
-            db.session.commit()
-            return jsonify({"success": True})
-            
-    return jsonify({"error": "Invalid action"}), 400
+@app.route("/student_info")
+def student_info():
+    return render_template("student_info.html")
 
 if __name__ == "__main__":
     app.run(debug=True)
